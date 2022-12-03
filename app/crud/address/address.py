@@ -6,7 +6,7 @@ from sqlalchemy import text
 
 
 def create_address_crud(db: Session, address: AddressCreate):
-    db_address = Address(house_name=address.house_name, country=address.country,
+    db_address = Address(house_name=address.house_name, country=address.country, latitude=address.latitude, longitude=address.longitude,
                                 state=address.state, district=address.district, zip_code=address.zip_code)
     db.add(db_address)
     db.commit()
@@ -29,6 +29,9 @@ def update_address_crud(db: Session, address: AddressUpdate, id: int):
     cur_address.state = address.state
     cur_address.district = address.district
     cur_address.zip_code = address.zip_code
+    cur_address.latitude = address.latitude
+    cur_address.longitude = address.longitude
+
     db.commit()
     return cur_address
 

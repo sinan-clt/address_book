@@ -9,6 +9,8 @@ class AddressCreate(BaseModel):
     state: str
     district: str
     zip_code: int
+    longitude: Optional[str]
+    latitude: Optional[str]
 
     class Config:
         orm_mode = True
@@ -20,10 +22,11 @@ class AddressUpdate(BaseModel):
     state: str
     district: str
     zip_code: int
+    longitude: Optional[str]
+    latitude: Optional[str]
 
     class Config:
         orm_mode = True
-
 
 
 class AddressBase(BaseModel):
@@ -32,9 +35,12 @@ class AddressBase(BaseModel):
     state: str
     district: str
     zip_code: int
-    is_deleted:bool
+    longitude: Optional[str]
+    latitude: Optional[str]
 
     class Config:
         orm_mode = True
-
-
+        
+class AddressLocationSearch(BaseModel):
+    latitude: float
+    longitude: float

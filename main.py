@@ -1,17 +1,14 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Response, Request, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, status, Response, Request
 from app.models.model import Base
 from app.database.main import engine, SessionLocal
 from sqlalchemy.orm import Session
-from app.crud.accounts.user import *
 from app.crud.address.address import *
-from app.schemas.accounts.user import *
 from app.schemas.address.address import *
 from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import AuthJWTException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-import random
-import math
+from typing import List
 
 
 Base.metadata.create_all(bind=engine)
@@ -69,126 +66,45 @@ async def db_session_middleware(request: Request, call_next):
 
 # API'S STARTING FROM HERE ***************
 
-# verifying mobile_number by generating_otp ************
-def generateOTP():
-    digits = "0123456789"
-    OTP = ""
-    print("OTP Generation")
-    for i in range(4):
-        OTP += digits[math.floor(random.random() * 10)]
-    return "1234"
-
-
-# user_registration ************
-@app.post("/usercreate", status_code=200)
-async def create_user(customer: CustomerRegistrationBase, db: Session = Depends(get_db)):
-    otp = generateOTP()
-    customer = create_customer(db, customer, otp)
-    return customer
-
-
-# resend_otp by using mobile_number ************
-@app.post("/resendOTP", status_code=200)
-async def resend_otp(customer: CustomerRegistrationBase, db: Session = Depends(get_db)):
-    otp = generateOTP()
-    customer = resend_otp_crud(db, customer, otp)
-    if customer:
-        return customer
-    else:
-        raise HTTPException(status_code=401, detail='Phone number not exist')
-
-
-# verify_user by using mobile_number and otp ************
-@app.post("/verifyotp")
-def login(auth_details: AuthDetails, Authorize:AuthJWT=Depends(), db: Session = Depends(get_db)):
-    user_authenticated, user = verify_otp(db, credential=auth_details)
-    if user_authenticated:
-        access_token=Authorize.create_access_token(auth_details.mobile, expires_time=85000)
-        refresh_token=Authorize.create_refresh_token(auth_details.mobile)
-        resdata = {'phone_number': user.phone_number ,
-                        'access_token': access_token, 'refresh_token': refresh_token}
-        raise HTTPException(status_code=200, detail=resdata)
-    else:
-        raise HTTPException(status_code=401, detail='Invalid otp')
-
-
-# getting details of logged_in user ************
-@app.get("/getuserdetails", response_model=UserDetailsBase, status_code=status.HTTP_200_OK)
-async def getUserDetails(Authorize:AuthJWT=Depends(), db: Session = Depends(get_db)):
-    Authorize.jwt_required()
-    user_details = Authorize.get_jwt_subject()
-    users = get_user_details(db, user_details)
-    address =  get_user_address_details_crud(db, users)
-    return {"user": users, "address": address}
-
-
-
-# creating the address of the user ************
+# creating the address ************
 @app.post("/createAddress")
-async def create_user_address(adddress: AddressCreate, db: Session = Depends(get_db), Authorize: AuthJWT=Depends()):
-    Authorize.jwt_required()
-    auth = Authorize.get_jwt_subject()
-    user = get_user_details(db, auth)
-    if len(check_already_added(db, user.id)) > 0:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
-                        detail="address already added !")
-    create_address_crud(db, adddress, user.id)
+async def create_address(adddress: AddressCreate, db: Session = Depends(get_db)):
+    create_address_crud(db, adddress)
     raise HTTPException(status_code=status.HTTP_200_OK,
                         detail={"status":"address added successfully"})
 
 
-# getting the address of the user ************
-@app.get("/getUserAddress", response_model=AddressBase, status_code=status.HTTP_200_OK)
-async def getUserAddress(db: Session = Depends(get_db),Authorize:AuthJWT=Depends(), ):
-    Authorize.jwt_required()
-    auth = Authorize.get_jwt_subject()
-    user = get_user_details(db, auth)
-    address = get_user_address(db, user)
+# getting the address ************
+@app.get("/getAddress", status_code=status.HTTP_200_OK)
+async def getAddress(db: Session = Depends(get_db)):
+    address = get_address(db)
     return address
 
 
-# uodating the address of the user ************
-@app.put("/userAddressUpdate")
-async def user_address_update(address: AddressUpdate, db: Session = Depends(get_db), Authorize: AuthJWT=Depends()):
-    Authorize.jwt_required()
-    auth = Authorize.get_jwt_subject()
-    user = get_user_details(db, auth)
-
-    if address is not None:
-        update_user_address(db, address, user.id)
-
-    raise HTTPException(status_code=status.HTTP_200_OK,
-                        detail={"status":"address updated successfully"})
+# # updating the address ************
+@app.put('/AddressUpdate/{address_id}', status_code=status.HTTP_200_OK)
+async def update_address(address_id: int, address: AddressUpdate, response: Response, db: Session = Depends(get_db)):
+    is_address_exist = get_address_by_id(db, id=address_id)
+    if is_address_exist:
+        update_address_crud(db=db, address=address, id=address_id)
+        return {"detail": "address updated successfully"}
+    response.status_code = status.HTTP_400_BAD_REQUEST
+    return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="address doesn't exist")
 
 
-
-# deleting the address of the user ************
-@app.post("/deleteAddress")
-async def delete_address(db: Session = Depends(get_db), Authorize:AuthJWT=Depends()):
-    Authorize.jwt_required()
-    auth = Authorize.get_jwt_subject()
-    user = get_user_details(db,auth)
-  
-    delete_address_crud(db, user.id)
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                    detail="removed from shortlist")
-   
+# # deleting the address ************
+@app.delete('/deleteAddress/{address_id}', status_code=status.HTTP_200_OK)
+def delete_address(address_id: int, response: Response, db: Session = Depends(get_db)):
+    is_address_exist = get_address_by_id(db, id=address_id)
+    if is_address_exist:
+        delete_address_crud(db, address_id)
+        return {"detail": "address deleted succesfully"}
+    response.status_code = status.HTTP_400_BAD_REQUEST
+    return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="address details doesn't exist")
 
 
-
-
-
-
-
-
-#*************** or creating new_access_token ********************************
-
-# @app.get('/new_token')
-# def create_new_token(Authorize:AuthJWT=Depends()):
-#     try:
-#         Authorize.jwt_refresh_token_required()
-#     except Exception as e:
-#         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Invalid token")
-#     current_user=Authorize.get_jwt_subject()
-#     access_token=Authorize.create_access_token(subject=current_user, expires_time=28800)
-#     return {"new_access_token":access_token}
+# # get address by coordinates ************
+@app.post("/getNearByAddress", response_model=List[AddressBase], status_code=status.HTTP_200_OK)
+async def get_near_by_address(address_search: AddressLocationSearch, db: Session = Depends(get_db)):
+    address = get_address_by_lat_long(db, address_search)
+    return address

@@ -1,15 +1,12 @@
 from sqlalchemy.orm import Session
 from app.models.model import *
 from app.schemas.address.address import *
+from sqlalchemy import text
 
 
 
-def check_already_added(db: Session, user: int):
-    return db.query(UserAddress).filter(UserAddress.user_id==user).all()
-
-
-def create_address_crud(db: Session, address: AddressCreate, user: int):
-    db_address = UserAddress(user_id=user, house_name=address.house_name, country=address.country,
+def create_address_crud(db: Session, address: AddressCreate):
+    db_address = Address(house_name=address.house_name, country=address.country,
                                 state=address.state, district=address.district, zip_code=address.zip_code)
     db.add(db_address)
     db.commit()
@@ -17,34 +14,44 @@ def create_address_crud(db: Session, address: AddressCreate, user: int):
     return db_address
 
 
-def get_user_address_info(db: Session, user_id: int):
-    return db.query(UserAddress).filter(UserAddress.user_id==user_id).first()
+def get_address(db: Session):
+    return db.query(Address).filter(Address.is_deleted==False).all()
+    
+
+def get_address_by_id(db: Session, id: int):
+    return db.query(Address).get(id)
 
 
-def update_user_address(db: Session, user_address: AddressUpdate, user_id: int):
-    print(user_id)
-
-    cur_address = get_user_address_info(db, user_id)
-    if cur_address:
-        cur_address.house_name = user_address.house_name
-        cur_address.country = user_address.country
-        cur_address.state = user_address.state
-        cur_address.district = user_address.district
-        cur_address.zip_code = user_address.zip_code
-        db.commit()
+def update_address_crud(db: Session, address: AddressUpdate, id: int):
+    cur_address = get_address_by_id(db, id=id)
+    cur_address.house_name = address.house_name
+    cur_address.country = address.country
+    cur_address.state = address.state
+    cur_address.district = address.district
+    cur_address.zip_code = address.zip_code
+    db.commit()
+    return cur_address
 
 
+def delete_address_crud(db: Session, id: int):
+    cur_address = get_address_by_id(db, id=id)
+    cur_address.is_deleted = True
+    db.commit()
+    return cur_address
+        
 
-def get_user_address(db: Session, user: Users):
-    return db.query(UserAddress).filter(UserAddress.user_id==user.id).first()
+def get_address_by_lat_long(db: Session, address_search: AddressLocationSearch):
+    select_query = text("""
+    SELECT `address`.*, (6367*ACOS(COS(RADIANS(%f))
+                *COS(RADIANS(`address`.`latitude`))*COS(RADIANS(`address`.`longitude`)-RADIANS(%f))
+                +SIN(RADIANS(%f))*SIN(RADIANS(`address`.`latitude`))))
+                AS distance FROM `address` WHERE address.is_deleted='0' HAVING
+                distance < %f ORDER BY distance LIMIT %d
+    """% (
+            address_search.latitude,
+            address_search.longitude,
+            address_search.latitude,
+        ))
+    result = db.execute(select_query).fetchall()
 
-
-def get_user_address_details(db: Session, user_id: int):
-    return db.query(UserAddress).filter(UserAddress.user_id==user_id).first()
-
-
-def delete_address_crud(db: Session, user_id: int):
-    cur_address = get_user_address_details(db, user_id)
-    if cur_address:
-        cur_address.is_deleted = True
-        db.commit()
+    return result
